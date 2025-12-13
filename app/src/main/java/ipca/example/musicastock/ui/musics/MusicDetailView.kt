@@ -104,7 +104,7 @@ fun MusicDetailView(
             audioUrl = audioUrl.trim().ifBlank { null },
             tabUrl = tabUrl.trim().ifBlank { null },
             collectionId = safeCollectionId,
-            isNew = (musicId == null)
+            //isNew = (musicId == null)
         )
 
 
