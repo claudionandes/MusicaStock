@@ -1,79 +1,105 @@
 package ipca.example.musicastock.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import ipca.example.musicastock.data.ResultWrapper
-import ipca.example.musicastock.data.snapshotFlow
+import ipca.example.musicastock.data.remote.api.CollectionsApi
+import ipca.example.musicastock.data.remote.dto.MusicCollectionDto
 import ipca.example.musicastock.domain.models.Collection
 import ipca.example.musicastock.domain.repository.ICollectionRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.tasks.await
+import java.util.UUID
 import javax.inject.Inject
 
 class CollectionRepositoryImpl @Inject constructor(
-    private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val api: CollectionsApi,
+    private val local: CollectionsLocalRepository
 ) : ICollectionRepository {
 
-    override fun getCurrentUserId(): String? = auth.currentUser?.uid
-
-    override fun getCurrentUserEmail(): String? = auth.currentUser?.email
+    // A API ainda não mostra auth; por agora não há “current user” no Android.
+    override fun getCurrentUserId(): String? = null
+    override fun getCurrentUserEmail(): String? = null
 
     override fun fetchCollections(): Flow<ResultWrapper<List<Collection>>> = flow {
         emit(ResultWrapper.Loading())
 
-        val uid = getCurrentUserId()
-        if (uid == null) {
-            emit(ResultWrapper.Error("Utilizador não autenticado."))
-            return@flow
-        }
+        try {
+            val remote = api.getAll().map { it.toDomain() }
 
-        db.collection("collections")
-            .whereArrayContains("owners", uid)
-            .snapshotFlow()
-            .collect { snapshot ->
-                val list = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Collection::class.java)?.apply { id = doc.id }
-                }
-
-                emit(ResultWrapper.Success(list))
+            runCatching {
+                local.clearAll()
+                local.insertCollections(remote)
             }
 
+            emit(ResultWrapper.Success(remote))
+        } catch (e: Exception) {
+            val cached = runCatching { local.getAllCollections() }.getOrDefault(emptyList())
+            if (cached.isNotEmpty()) {
+                emit(ResultWrapper.Success(cached))
+            } else {
+                emit(ResultWrapper.Error(e.message ?: "Erro ao carregar coleções."))
+            }
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun addCollection(collection: Collection): Flow<ResultWrapper<String>> = flow {
         emit(ResultWrapper.Loading())
 
-        try {
-            val documentRef = db.collection("collections")
-                .add(collection)
-                .await()
-
-            emit(ResultWrapper.Success(documentRef.id))
-
-        } catch (e: Exception) {
-            emit(ResultWrapper.Error(e.message ?: "Erro ao criar coleção"))
+        val title = collection.title?.trim()
+        if (title.isNullOrBlank()) {
+            emit(ResultWrapper.Error("O título é obrigatório."))
+            return@flow
         }
 
+        try {
+            val created = api.create(
+                MusicCollectionDto(
+                    title = title,
+                    style = collection.style,
+                    ownerId = null // ainda sem auth na API
+                )
+            )
+
+            val saved = created.toDomain()
+            runCatching { local.insertCollection(saved) }
+
+            emit(ResultWrapper.Success(saved.id))
+        } catch (_: Exception) {
+            // OFFLINE: cria ID local para poderes navegar para o detalhe
+            val localId = UUID.randomUUID().toString()
+            val offline = collection.copy(id = localId)
+
+            runCatching { local.insertCollection(offline) }
+
+            // devolve Success com id (para navegação), mas a UI vai receber aviso via Error?
+            // aqui preferimos manter o padrão do teu ViewModel:
+            // - ele navega no Success
+            // - e no Error ele também navega (no teu código atual navega no Error)
+            // Para ficar 100% consistente com o teu ViewModel atual, devolvemos Error.
+            // MAS: no teu ViewModel, no Error ele também cria id local e navega.
+            // Ou seja, podemos devolver Error e manter o padrão.
+            emit(ResultWrapper.Error("Sem ligação. Coletânea guardada apenas localmente."))
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun deleteCollection(collectionId: String): Flow<ResultWrapper<Unit>> = flow {
         emit(ResultWrapper.Loading())
 
-        try {
-            db.collection("collections")
-                .document(collectionId)
-                .delete()
-                .await()
+        val apiOk = runCatching {
+            val res = api.delete(collectionId)
+            res.isSuccessful
+        }.getOrDefault(false)
 
-            emit(ResultWrapper.Success(Unit))
-        } catch (e: Exception) {
-            emit(ResultWrapper.Error(e.message ?: "Erro ao apagar coleção"))
+        // remove do Room sempre
+        runCatching {
+            val all = local.getAllCollections()
+            val match = all.firstOrNull { it.id == collectionId }
+            if (match != null) local.deleteCollection(match)
         }
 
+        if (apiOk) emit(ResultWrapper.Success(Unit))
+        else emit(ResultWrapper.Error("Sem ligação. Coletânea apagada apenas localmente."))
     }.flowOn(Dispatchers.IO)
 
     override fun updateCollection(
@@ -83,17 +109,52 @@ class CollectionRepositoryImpl @Inject constructor(
     ): Flow<ResultWrapper<Unit>> = flow {
         emit(ResultWrapper.Loading())
 
-        try {
-            db.collection("collections")
-                .document(collectionId)
-                .update("title", title, "style", style)
-                .await()
-
-            emit(ResultWrapper.Success(Unit))
-        } catch (e: Exception) {
-            emit(ResultWrapper.Error(e.message ?: "Erro ao atualizar coleção"))
+        val titleTrim = title.trim()
+        if (titleTrim.isBlank()) {
+            emit(ResultWrapper.Error("O título é obrigatório."))
+            return@flow
         }
 
+        try {
+            // Buscar atual para manter campos que a API possa exigir
+            val current = api.getById(collectionId)
+
+            val body = current.copy(
+                title = titleTrim,
+                style = style
+            )
+
+            val res = api.update(collectionId, body)
+            if (!res.isSuccessful) {
+                emit(ResultWrapper.Error("Erro ao atualizar coleção (${res.code()})."))
+                return@flow
+            }
+
+            // Atualiza cache local
+            runCatching {
+                val all = local.getAllCollections()
+                val match = all.firstOrNull { it.id == collectionId }
+                if (match != null) local.insertCollection(match.copy(title = titleTrim, style = style))
+            }
+
+            emit(ResultWrapper.Success(Unit))
+        } catch (_: Exception) {
+            // OFFLINE: atualiza localmente e avisa
+            runCatching {
+                val all = local.getAllCollections()
+                val match = all.firstOrNull { it.id == collectionId }
+                if (match != null) local.insertCollection(match.copy(title = titleTrim, style = style))
+            }
+
+            emit(ResultWrapper.Error("Sem ligação. Coletânea atualizada apenas localmente."))
+        }
     }.flowOn(Dispatchers.IO)
 
+    // (Opcional mas recomendado) — evita crash caso collectionId venha nulo no JSON
+    private fun MusicCollectionDto.toDomain(): Collection =
+        Collection(
+            id = this.collectionId ?: UUID.randomUUID().toString(),
+            title = this.title,
+            style = this.style
+        )
 }

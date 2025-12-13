@@ -3,7 +3,6 @@ package ipca.example.musicastock.ui.musics
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
@@ -15,13 +14,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import ipca.example.musicastock.R
 import ipca.example.musicastock.domain.models.Music
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,54 +36,66 @@ fun MusicDetailView(
 
     var title by remember { mutableStateOf("") }
     var artist by remember { mutableStateOf("") }
-    var albun by remember { mutableStateOf("") }
+    var album by remember { mutableStateOf("") }
     var releaseDate by remember { mutableStateOf("") }
     var musStyle by remember { mutableStateOf("") }
     var audioUrl by remember { mutableStateOf("") }
     var tabUrl by remember { mutableStateOf("") }
 
+    val safeCollectionId: String? = collectionId
+        .trim()
+        .takeIf { it.isNotBlank() && it.lowercase() != "null" && it.lowercase() != "none" }
+
     LaunchedEffect(musicId) {
-        if (musicId != null) {
-            viewModel.loadMusicById(musicId)
-        }
+        if (musicId != null) viewModel.loadMusicById(musicId)
     }
 
     LaunchedEffect(uiState.selectedMusic) {
         uiState.selectedMusic?.let { music ->
-            title = music.musTitle ?: ""
-            artist = music.artist ?: ""
-            albun = music.album ?: ""
-            releaseDate = music.releaseDate ?: ""
-            musStyle = music.musStyle ?: ""
-            audioUrl = music.audioUrl ?: ""
-            tabUrl = music.tabUrl ?: ""
+            title = music.musTitle.orEmpty()
+            artist = music.artist.orEmpty()
+            album = music.album.orEmpty()
+            releaseDate = music.releaseDate.orEmpty()
+            musStyle = music.musStyle.orEmpty()
+            audioUrl = music.audioUrl.orEmpty()
+            tabUrl = music.tabUrl.orEmpty()
         }
     }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { message ->
-            scope.launch {
-                snackbarHostState.showSnackbar(message)
-            }
+            scope.launch { snackbarHostState.showSnackbar(message) }
         }
+    }
+
+    fun isValidIsoDate(input: String): Boolean {
+        val s = input.trim()
+        val regex = Regex("""^\d{4}-\d{2}-\d{2}$""")
+        return s.isBlank() || regex.matches(s)
     }
 
     fun onSaveClick() {
         val titleTrim = title.trim()
         val artistTrim = artist.trim()
-        val albumTrim = albun.trim()
+        val albumTrim = album.trim()
         val releaseDateTrim = releaseDate.trim()
         val musStyleTrim = musStyle.trim()
 
         if (titleTrim.isBlank()) {
-            scope.launch {
-                snackbarHostState.showSnackbar("O título é obrigatório!")
-            }
+            scope.launch { snackbarHostState.showSnackbar("O título é obrigatório!") }
             return
         }
 
+        if (!isValidIsoDate(releaseDateTrim)) {
+            scope.launch { snackbarHostState.showSnackbar("Data inválida. Usa yyyy-MM-dd (ex: 1997-05-20).") }
+            return
+        }
+
+        // ✅ musId agora é sempre String (não-nulo)
+        val finalId = musicId ?: uiState.selectedMusic?.musId ?: UUID.randomUUID().toString()
+
         val music = Music(
-            musId = musicId,
+            musId = musicId ?: java.util.UUID.randomUUID().toString(),
             musTitle = titleTrim,
             artist = artistTrim.ifBlank { null },
             album = albumTrim.ifBlank { null },
@@ -92,12 +103,12 @@ fun MusicDetailView(
             musStyle = musStyleTrim.ifBlank { null },
             audioUrl = audioUrl.trim().ifBlank { null },
             tabUrl = tabUrl.trim().ifBlank { null },
-            collectionId = collectionId
+            collectionId = safeCollectionId,
+            isNew = (musicId == null)
         )
 
-        viewModel.saveMusic(music) {
-            navController.popBackStack()
-        }
+
+        viewModel.saveMusic(music) { navController.popBackStack() }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -161,9 +172,7 @@ fun MusicDetailView(
                                 )
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent
-                        )
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
                 }
             },
@@ -182,10 +191,7 @@ fun MusicDetailView(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Save,
-                            contentDescription = if (musicId == null)
-                                "Guardar Música"
-                            else
-                                "Atualizar Música"
+                            contentDescription = if (musicId == null) "Guardar Música" else "Atualizar Música"
                         )
                     }
                 }
@@ -215,17 +221,16 @@ fun MusicDetailView(
                 )
 
                 OutlinedTextField(
-                    value = albun,
-                    onValueChange = { albun = it },
-                    label = { Text("Album") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    value = album,
+                    onValueChange = { album = it },
+                    label = { Text("Álbum") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = releaseDate,
                     onValueChange = { releaseDate = it },
-                    label = { Text("Data de Lançamento") },
+                    label = { Text("Data de Lançamento (yyyy-MM-dd)") },
                     modifier = Modifier.fillMaxWidth()
                 )
 

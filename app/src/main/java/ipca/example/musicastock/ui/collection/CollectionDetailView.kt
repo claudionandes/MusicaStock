@@ -42,7 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import ipca.example.musicastock.R
 import ipca.example.musicastock.domain.models.Music
@@ -302,23 +302,23 @@ fun CollectionMusicList(
         if (musicToDelete != null) {
             AlertDialog(
                 onDismissRequest = { musicToDelete = null },
-                title = { Text("Apagar Música") },
+                title = { Text("Remover Música da Coletânea") },
                 text = {
                     Text(
-                        "Tens a certeza que queres apagar a música \"" +
+                        "Tens a certeza que queres remover a música \"" +
                                 (musicToDelete?.musTitle ?: "sem título") +
-                                "\"?\nEsta ação é irreversível."
+                                "\" desta coletânea?"
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = {
                         val id = musicToDelete?.musId
                         if (id != null) {
-                            musicViewModel.deleteMusic(id)
+                            musicViewModel.removeMusicFromCollection(collectionId, id)
                         }
                         musicToDelete = null
                     }) {
-                        Text("Apagar", color = Color.Red)
+                        Text("Remover", color = Color.Red)
                     }
                 },
                 dismissButton = {
@@ -328,6 +328,7 @@ fun CollectionMusicList(
                 }
             )
         }
+
     }
 }
 

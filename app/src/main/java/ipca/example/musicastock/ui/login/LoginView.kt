@@ -5,20 +5,23 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import ipca.example.musicastock.R
 
 @Composable
@@ -28,11 +31,42 @@ fun LoginView(
 ) {
     val uiState by viewModel.uiState
 
-    var showRegisterBox by remember { mutableStateOf(false) }
-    var registerEmail by remember { mutableStateOf("") }
-    var registerPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var registerError by remember { mutableStateOf<String?>(null) }
+    var showRegisterBox by rememberSaveable { mutableStateOf(false) }
+    var registerEmail by rememberSaveable { mutableStateOf("") }
+    var registerPassword by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var registerError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun resetRegisterForm() {
+        registerEmail = ""
+        registerPassword = ""
+        confirmPassword = ""
+        registerError = null
+    }
+
+    val fieldColors = TextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        cursorColor = Color.White,
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        focusedIndicatorColor = Color.White,
+        unfocusedIndicatorColor = Color.White.copy(alpha = 0.7f),
+        focusedLabelColor = Color.White,
+        unfocusedLabelColor = Color.White.copy(alpha = 0.8f)
+    )
+
+    val registerFieldColors = TextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        cursorColor = Color.White,
+        focusedContainerColor = Color.Black.copy(alpha = 0.25f),
+        unfocusedContainerColor = Color.Black.copy(alpha = 0.15f),
+        focusedIndicatorColor = Color(0xFFAF512E),
+        unfocusedIndicatorColor = Color.White.copy(alpha = 0.4f),
+        focusedLabelColor = Color.White,
+        unfocusedLabelColor = Color.White.copy(alpha = 0.75f)
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -42,13 +76,16 @@ fun LoginView(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.45f))
         )
 
-
+        // -------------------------
+        // LOGIN
+        // -------------------------
         if (!showRegisterBox) {
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -84,26 +121,18 @@ fun LoginView(
 
                 Spacer(modifier = Modifier.height(40.dp))
 
-
                 OutlinedTextField(
                     value = uiState.email,
                     onValueChange = { viewModel.setEmail(it) },
                     label = { Text("Email") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        cursorColor = Color.White,
-                        focusedIndicatorColor = Color.White,
-                        unfocusedIndicatorColor = Color.White,
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.White
-                    )
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -114,20 +143,13 @@ fun LoginView(
                     label = { Text("Palavra-passe") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        cursorColor = Color.White,
-                        focusedIndicatorColor = Color.White,
-                        unfocusedIndicatorColor = Color.White,
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.White
-                    )
+                    colors = fieldColors
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -157,16 +179,15 @@ fun LoginView(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Ainda não tens conta?",
-                        color = Color.White
-                    )
+                    Text(text = "Ainda não tem conta?", color = Color.White)
 
-                    TextButton(onClick = { showRegisterBox = true }) {
-                        Text(
-                            text = "Regista-te",
-                            color = Color(0xFFAF512E)
-                        )
+                    TextButton(
+                        onClick = {
+                            resetRegisterForm()
+                            showRegisterBox = true
+                        }
+                    ) {
+                        Text(text = "Registar", color = Color(0xFFAF512E))
                     }
                 }
 
@@ -190,7 +211,9 @@ fun LoginView(
             }
         }
 
-
+        // -------------------------
+        // REGISTO
+        // -------------------------
         AnimatedVisibility(visible = showRegisterBox) {
 
             Box(
@@ -245,31 +268,38 @@ fun LoginView(
 
                         OutlinedTextField(
                             value = registerEmail,
-                            onValueChange = { registerEmail = it },
-                            label = { Text("Email", color = Color.White.copy(alpha = 0.6f)) },
+                            onValueChange = { registerEmail = it; registerError = null },
+                            label = { Text("Email") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = registerFieldColors
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedTextField(
                             value = registerPassword,
-                            onValueChange = { registerPassword = it },
-                            label = { Text("Palavra-passe", color = Color.White.copy(alpha = 0.6f)) },
+                            onValueChange = { registerPassword = it; registerError = null },
+                            label = { Text("Palavra-passe") },
                             visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = registerFieldColors
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedTextField(
                             value = confirmPassword,
-                            onValueChange = { confirmPassword = it },
-                            label = { Text("Confirmar palavra-passe", color = Color.White.copy(alpha = 0.6f)) },
+                            onValueChange = { confirmPassword = it; registerError = null },
+                            label = { Text("Confirmar palavra-passe") },
                             visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = registerFieldColors
                         )
 
                         registerError?.let {
@@ -305,7 +335,7 @@ fun LoginView(
                                         registerEmail.isBlank() ||
                                                 registerPassword.isBlank() ||
                                                 confirmPassword.isBlank() ->
-                                            registerError = "Preenche todos os campos."
+                                            registerError = "Devem ser preenchidos todos os campos."
 
                                         registerPassword != confirmPassword ->
                                             registerError = "As palavras-passe não coincidem."
@@ -316,6 +346,7 @@ fun LoginView(
                                             viewModel.setPassword(registerPassword)
                                             viewModel.register {
                                                 showRegisterBox = false
+                                                resetRegisterForm()
                                                 onLoginSuccess()
                                             }
                                         }
@@ -325,14 +356,22 @@ fun LoginView(
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFAF512E))
                             ) {
-                                if (uiState.isLoading)
-                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
-                                else
+                                if (uiState.isLoading) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
                                     Text("Registar", color = Color.White)
+                                }
                             }
 
                             OutlinedButton(
-                                onClick = { showRegisterBox = false },
+                                onClick = {
+                                    showRegisterBox = false
+                                    resetRegisterForm()
+                                },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Cancelar", color = Color(0xFFAF512E))

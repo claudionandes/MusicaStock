@@ -2,48 +2,133 @@ package ipca.example.musicastock
 
 import android.content.Context
 import androidx.room.Room
-import com.google.firebase.Firebase
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.auth
-import com.google.firebase.firestore.FirebaseFirestore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import ipca.example.musicastock.data.auth.AuthInterceptor
+import ipca.example.musicastock.data.auth.TokenStore
+import ipca.example.musicastock.data.auth.TokenStoreImpl
 import ipca.example.musicastock.data.local.AppDatabase
 import ipca.example.musicastock.data.local.dao.CollectionDao
 import ipca.example.musicastock.data.local.dao.MusicDao
+import ipca.example.musicastock.data.remote.api.AuthApi
+import ipca.example.musicastock.data.remote.api.CollectionsApi
+import ipca.example.musicastock.data.remote.api.MusicApi
 import ipca.example.musicastock.data.repository.CollectionRepositoryImpl
+import ipca.example.musicastock.data.repository.CollectionsLocalRepository
 import ipca.example.musicastock.data.repository.LoginRepository
 import ipca.example.musicastock.data.repository.MusicRepository
+import ipca.example.musicastock.data.repository.MusicsLocalRepository
 import ipca.example.musicastock.domain.repository.ICollectionRepository
 import ipca.example.musicastock.domain.repository.ILoginRepository
 import ipca.example.musicastock.domain.repository.IMusicRepository
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    @Provides
-    @Singleton
-    fun provideFirestore(): FirebaseFirestore =
-        FirebaseFirestore.getInstance()
+    private const val BASE_URL = "http://10.0.2.2:5000/"
 
+    // -----------------------------
+    // TokenStore
+    // -----------------------------
     @Provides
     @Singleton
-    fun provideAuth(): FirebaseAuth = Firebase.auth
+    fun provideTokenStore(@ApplicationContext context: Context): TokenStore =
+        TokenStoreImpl(context)
 
+    // -----------------------------
+    // Interceptor
+    // -----------------------------
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
-        return Room.databaseBuilder(
-            context,
-            AppDatabase::class.java,
-            "local_music_db"
-        ).build()
+    fun provideAuthInterceptor(tokenStore: TokenStore): AuthInterceptor =
+        AuthInterceptor(tokenStore)
+
+    // -----------------------------
+    // OkHttp / Retrofit
+    // -----------------------------
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+
+        return OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .addInterceptor(authInterceptor)
+            .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(client: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+    // -----------------------------
+    // APIs
+    // -----------------------------
+    @Provides
+    @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi =
+        retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideMusicApi(retrofit: Retrofit): MusicApi =
+        retrofit.create(MusicApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideCollectionsApi(retrofit: Retrofit): CollectionsApi =
+        retrofit.create(CollectionsApi::class.java)
+
+    // -----------------------------
+    // Repositories (Domain interfaces)
+    // -----------------------------
+    @Provides
+    @Singleton
+    fun provideLoginRepository(
+        authApi: AuthApi,
+        tokenStore: TokenStore
+    ): ILoginRepository = LoginRepository(authApi, tokenStore)
+
+    @Provides
+    @Singleton
+    fun provideMusicRepository(
+        musicApi: MusicApi,
+        collectionsApi: CollectionsApi,
+        local: MusicsLocalRepository
+    ): IMusicRepository = MusicRepository(musicApi, collectionsApi, local)
+
+    @Provides
+    @Singleton
+    fun provideCollectionRepository(
+        api: CollectionsApi,
+        local: CollectionsLocalRepository
+    ): ICollectionRepository = CollectionRepositoryImpl(api, local)
+
+    // -----------------------------
+    // Room
+    // -----------------------------
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, "local_music_db")
+            .fallbackToDestructiveMigration()
+            .build()
 
     @Provides
     @Singleton
@@ -54,26 +139,4 @@ object AppModule {
     fun provideMusicDao(db: AppDatabase): MusicDao = db.musicDao()
 
 
-    @Provides
-    @Singleton
-    fun provideCollectionRepository(
-        db: FirebaseFirestore,
-        auth: FirebaseAuth
-    ): ICollectionRepository = CollectionRepositoryImpl(db, auth)
-
-    @Provides
-    @Singleton
-    fun provideLoginRepository(
-        auth: FirebaseAuth,
-        db: FirebaseFirestore
-    ): ILoginRepository = LoginRepository(auth, db)
-
-    @Provides
-    @Singleton
-    fun provideMusicRepository(
-        db: FirebaseFirestore,
-        auth: FirebaseAuth
-    ): IMusicRepository = MusicRepository(db, auth)
-
 }
-

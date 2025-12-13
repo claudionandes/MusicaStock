@@ -7,12 +7,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ipca.example.musicastock.data.ResultWrapper
+import ipca.example.musicastock.data.repository.MusicsLocalRepository
 import ipca.example.musicastock.domain.models.Music
 import ipca.example.musicastock.domain.repository.IMusicRepository
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import ipca.example.musicastock.data.repository.MusicsLocalRepository
-
 
 data class MusicState(
     val musics: List<Music> = emptyList(),
@@ -27,8 +26,8 @@ class MusicViewModel @Inject constructor(
     private val localRepository: MusicsLocalRepository
 ) : ViewModel() {
 
-
     var uiState by mutableStateOf(MusicState())
+        private set
 
     fun fetchAllMusics() {
         viewModelScope.launch {
@@ -40,38 +39,26 @@ class MusicViewModel @Inject constructor(
 
                     is ResultWrapper.Success -> {
                         val musics = result.data ?: emptyList()
+                        uiState = uiState.copy(isLoading = false, musics = musics, error = null)
 
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            musics = musics,
-                            error = null
-                        )
-
-                        try {
+                        runCatching {
                             localRepository.clearAll()
                             localRepository.insertMusics(musics)
-                        } catch (_: Exception) {
                         }
                     }
 
                     is ResultWrapper.Error -> {
-                        try {
-                            val cached = localRepository.getAllMusics()
+                        val cached = runCatching { localRepository.getAllMusics() }
+                            .getOrDefault(emptyList())
 
-                            if (cached.isNotEmpty()) {
-                                uiState = uiState.copy(
-                                    isLoading = false,
-                                    musics = cached,
-                                    error = "Sem ligação. A mostrar dados offline."
-                                )
-                            } else {
-                                uiState = uiState.copy(
-                                    isLoading = false,
-                                    error = result.message ?: "Erro ao carregar músicas."
-                                )
-                            }
-                        } catch (e: Exception) {
-                            uiState = uiState.copy(
+                        uiState = if (cached.isNotEmpty()) {
+                            uiState.copy(
+                                isLoading = false,
+                                musics = cached,
+                                error = "Sem ligação. A mostrar dados offline."
+                            )
+                        } else {
+                            uiState.copy(
                                 isLoading = false,
                                 error = result.message ?: "Erro ao carregar músicas."
                             )
@@ -81,7 +68,6 @@ class MusicViewModel @Inject constructor(
             }
         }
     }
-
 
     fun fetchMusicsByCollection(collectionId: String) {
         viewModelScope.launch {
@@ -93,40 +79,25 @@ class MusicViewModel @Inject constructor(
 
                     is ResultWrapper.Success -> {
                         val musics = result.data ?: emptyList()
+                        uiState = uiState.copy(isLoading = false, musics = musics, error = null)
 
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            musics = musics,
-                            error = null
-                        )
-
-                        try {
-                            localRepository.insertMusics(musics)
-                        } catch (_: Exception) {
-                        }
+                        // cache local (p/ offline)
+                        runCatching { localRepository.insertMusics(musics) }
                     }
 
                     is ResultWrapper.Error -> {
-                        try {
-                            val cached = localRepository
-                                .getAllMusics()
-                                .filter { it.collectionId == collectionId }
+                        val cached = runCatching { localRepository.getAllMusics() }
+                            .getOrDefault(emptyList())
+                            .filter { it.collectionId == collectionId }
 
-                            if (cached.isNotEmpty()) {
-                                uiState = uiState.copy(
-                                    isLoading = false,
-                                    musics = cached,
-                                    error = "Sem ligação. A mostrar dados offline."
-                                )
-                            } else {
-                                uiState = uiState.copy(
-                                    isLoading = false,
-                                    error = result.message
-                                        ?: "Erro ao carregar músicas da coletânea."
-                                )
-                            }
-                        } catch (e: Exception) {
-                            uiState = uiState.copy(
+                        uiState = if (cached.isNotEmpty()) {
+                            uiState.copy(
+                                isLoading = false,
+                                musics = cached,
+                                error = "Sem ligação. A mostrar dados offline."
+                            )
+                        } else {
+                            uiState.copy(
                                 isLoading = false,
                                 error = result.message ?: "Erro ao carregar músicas da coletânea."
                             )
@@ -137,26 +108,30 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-
     fun loadMusicById(musicId: String) {
         viewModelScope.launch {
-            when (val result = musicRepository.getMusicById(musicId)) {
-                is ResultWrapper.Loading ->
-                    uiState = uiState.copy(isLoading = true, error = null)
+            uiState = uiState.copy(isLoading = true, error = null, selectedMusic = null)
 
-                is ResultWrapper.Success ->
+            when (val result = musicRepository.getMusicById(musicId)) {
+                is ResultWrapper.Success -> {
                     uiState = uiState.copy(
                         isLoading = false,
                         selectedMusic = result.data,
                         error = null
                     )
+                }
 
-                is ResultWrapper.Error ->
+                is ResultWrapper.Error -> {
                     uiState = uiState.copy(
                         isLoading = false,
                         selectedMusic = null,
-                        error = result.message
+                        error = result.message ?: "Erro ao carregar música."
                     )
+                }
+
+                is ResultWrapper.Loading -> {
+                    uiState = uiState.copy(isLoading = true, error = null)
+                }
             }
         }
     }
@@ -166,53 +141,40 @@ class MusicViewModel @Inject constructor(
             musicRepository.saveMusic(music).collect { result ->
                 when (result) {
                     is ResultWrapper.Loading -> {
-                        uiState = uiState.copy(
-                            isLoading = true,
-                            error = null
-                        )
+                        uiState = uiState.copy(isLoading = true, error = null)
                     }
 
                     is ResultWrapper.Success -> {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            error = null
-                        )
+                        uiState = uiState.copy(isLoading = false, error = null)
 
-                        try {
-                            localRepository.insertMusic(music)
-                        } catch (_: Exception) { }
+                        // IMPORTANTE:
+                        // Não inserir aqui "music" diretamente no Room, porque ao criar online
+                        // o ID vem do servidor e o repository é que deve cachear a versão correta.
+                        // Faz refresh da lista para refletir o ID correto.
+                        val colId = music.collectionId
+                        if (!colId.isNullOrBlank()) fetchMusicsByCollection(colId) else fetchAllMusics()
 
                         onSuccess()
                     }
 
                     is ResultWrapper.Error -> {
-                       try {
-                            localRepository.insertMusic(music)
+                        // offline-friendly: o repository pode já ter guardado (ou tenta-se aqui)
+                        runCatching { localRepository.insertMusic(music) }
 
-                            uiState = uiState.copy(
-                                isLoading = false,
-                                error = "Sem ligação. Música guardada apenas localmente."
-                            )
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = "Sem ligação. Música guardada apenas localmente."
+                        )
 
+                        val colId = music.collectionId
+                        if (!colId.isNullOrBlank()) fetchMusicsByCollection(colId) else fetchAllMusics()
 
-                            onSuccess()
-
-                        } catch (e: Exception) {
-                            uiState = uiState.copy(
-                                isLoading = false,
-                                error = result.message ?: "Erro ao guardar música."
-                            )
-                        }
+                        onSuccess()
                     }
                 }
             }
         }
     }
-
-
-
-
-
 
     fun deleteMusic(musicId: String, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
@@ -223,14 +185,16 @@ class MusicViewModel @Inject constructor(
                     }
 
                     is ResultWrapper.Success -> {
-                        uiState = uiState.copy(isLoading = false, error = null)
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = null,
+                            musics = uiState.musics.filterNot { it.musId == musicId }
+                        )
 
-                        val musicToDelete = uiState.musics.find { it.musId == musicId }
-                        try {
-                            if (musicToDelete != null) {
-                                localRepository.deleteMusic(musicToDelete)
-                            }
-                        } catch (_: Exception) {
+                        runCatching {
+                            val all = localRepository.getAllMusics()
+                            val match = all.firstOrNull { it.musId == musicId }
+                            if (match != null) localRepository.deleteMusic(match)
                         }
 
                         onSuccess()
@@ -247,4 +211,33 @@ class MusicViewModel @Inject constructor(
         }
     }
 
+    fun removeMusicFromCollection(collectionId: String, musicId: String) {
+        viewModelScope.launch {
+            musicRepository.removeMusicFromCollection(collectionId, musicId).collect { result ->
+                when (result) {
+                    is ResultWrapper.Loading -> {
+                        uiState = uiState.copy(isLoading = true, error = null)
+                    }
+
+                    is ResultWrapper.Success -> {
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = null,
+                            musics = uiState.musics.filterNot { it.musId == musicId }
+                        )
+
+                        // refresh para garantir consistência com Room+API
+                        fetchMusicsByCollection(collectionId)
+                    }
+
+                    is ResultWrapper.Error -> {
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = result.message ?: "Erro ao remover música da coletânea."
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

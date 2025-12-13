@@ -5,7 +5,16 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
@@ -17,9 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,28 +48,23 @@ fun MusicViewCell(
     val context = LocalContext.current
     var showInfo by remember { mutableStateOf(false) }
 
-    fun openAudio() {
-        val url = music.audioUrl
-        if (!url.isNullOrBlank()) {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            context.startActivity(intent)
+    fun openUrl(url: String?) {
+        val safe = url?.trim()
+        if (!safe.isNullOrBlank()) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(safe))
+            runCatching { context.startActivity(intent) }
         }
     }
 
-    fun openTab() {
-        val url = music.tabUrl
-        if (!url.isNullOrBlank()) {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            context.startActivity(intent)
-        }
-    }
+    val hasAudio = !music.audioUrl.isNullOrBlank()
+    val hasTab = !music.tabUrl.isNullOrBlank()
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable {
-                openAudio()
+                if (hasAudio) openUrl(music.audioUrl) else showInfo = true
             },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
@@ -74,14 +78,17 @@ fun MusicViewCell(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            if (!music.audioUrl.isNullOrBlank()) {
-                IconButton(onClick = { openAudio() }) {
+            if (hasAudio) {
+                IconButton(onClick = { openUrl(music.audioUrl) }) {
                     Icon(
                         painter = painterResource(id = R.drawable.spotify),
                         contentDescription = "Ouvir música",
                         tint = Color(0xFFAF512E)
                     )
                 }
+            } else {
+                // placeholder para manter alinhamento quando não há áudio
+                Spacer(modifier = Modifier.size(48.dp))
             }
 
             Column(
@@ -90,7 +97,7 @@ fun MusicViewCell(
                     .padding(start = 8.dp)
             ) {
                 Text(
-                    text = music.musTitle ?: "Sem título",
+                    text = music.musTitle?.takeIf { it.isNotBlank() } ?: "Sem título",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White
@@ -99,14 +106,14 @@ fun MusicViewCell(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = music.artist ?: "Artista desconhecido",
+                    text = music.artist?.takeIf { it.isNotBlank() } ?: "Artista desconhecido",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.85f)
                 )
             }
 
-            if (!music.tabUrl.isNullOrBlank()) {
-                IconButton(onClick = { openTab() }) {
+            if (hasTab) {
+                IconButton(onClick = { openUrl(music.tabUrl) }) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_guitar),
                         contentDescription = "Abrir tablatura",
@@ -212,16 +219,16 @@ private fun InfoRow(
     label: String,
     value: String?
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    val safeValue = value?.trim().takeIf { !it.isNullOrBlank() } ?: "-"
+
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.7f)
         )
         Text(
-            text = value ?: "-",
+            text = safeValue,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = Color.White

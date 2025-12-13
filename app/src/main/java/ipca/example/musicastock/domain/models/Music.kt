@@ -1,24 +1,23 @@
 package ipca.example.musicastock.domain.models
 
-import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-
 @Entity(tableName = "musics")
 data class Music(
+    @PrimaryKey
+    val musId: String = "",
 
-    @PrimaryKey(autoGenerate = true)
-    var localId: Int = 0,
+    val musTitle: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val releaseDate: String? = null,
+    val audioUrl: String? = null,
 
-    var musId: String? = null,
-    var musTitle: String? = null,
-    var artist: String? = null,
-    var album: String? = null,
-    var releaseDate: String? = null,
-    var musStyle: String? = null,
-    var audioUrl: String? = null,
-    var tabUrl: String? = null,
-    var collectionId: String? = null,
-    var ownerId: String? = null
+    // extras locais
+    val musStyle: String? = null,
+    val tabUrl: String? = null,
+
+    // pode ser null (música fora de coletânea)
+    val collectionId: String? = null
 )

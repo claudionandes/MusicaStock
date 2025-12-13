@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="ipca.example.musicastock" />
-                  <option name="mobileSdkAppId" value="1:139874454067:android:c9e76b09857c670a61f146" />
-                  <option name="projectId" value="musicas-hug" />
-                  <option name="projectNumber" value="139874454067" />
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

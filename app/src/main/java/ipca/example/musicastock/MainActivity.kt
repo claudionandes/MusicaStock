@@ -16,29 +16,32 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import dagger.hilt.android.AndroidEntryPoint
-import ipca.example.musicastock.ui.collection.*
+import ipca.example.musicastock.data.auth.TokenStore
+import ipca.example.musicastock.ui.collection.CollectionCreateView
+import ipca.example.musicastock.ui.collection.CollectionDetailView
+import ipca.example.musicastock.ui.collection.CollectionEditView
+import ipca.example.musicastock.ui.collection.CollectionView
 import ipca.example.musicastock.ui.login.LoginView
 import ipca.example.musicastock.ui.musics.AllMusicsView
 import ipca.example.musicastock.ui.musics.MusicDetailView
 import ipca.example.musicastock.ui.theme.MusicastockTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var tokenStore: TokenStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {
-
             val navController = rememberNavController()
-            val auth = Firebase.auth
 
             MusicastockTheme {
-
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Surface(
                         modifier = Modifier.padding(innerPadding),
@@ -102,7 +105,6 @@ class MainActivity : ComponentActivity() {
                                 AllMusicsView(navController = navController)
                             }
 
-
                             composable(
                                 route = "musicDetail/{collectionId}",
                                 arguments = listOf(
@@ -130,6 +132,7 @@ class MainActivity : ComponentActivity() {
                                     ?: return@composable
 
                                 val musId = entry.arguments?.getString("musicId")
+                                    ?: return@composable
 
                                 MusicDetailView(
                                     navController = navController,
@@ -141,9 +144,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-
             LaunchedEffect(Unit) {
-                if (auth.currentUser != null) {
+                val token = tokenStore.getToken()
+                if (!token.isNullOrBlank()) {
                     navController.navigate("collections") {
                         popUpTo("login") { inclusive = true }
                     }

@@ -1,59 +1,72 @@
 package ipca.example.musicastock.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import ipca.example.musicastock.data.ResultWrapper
+import ipca.example.musicastock.data.auth.TokenStore
+import ipca.example.musicastock.data.remote.api.AuthApi
+import ipca.example.musicastock.data.remote.dto.LoginRequestDto
+import ipca.example.musicastock.data.remote.dto.RegisterRequestDto
 import ipca.example.musicastock.domain.repository.ILoginRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 class LoginRepository @Inject constructor(
-    private val auth: FirebaseAuth,
-    private val db: FirebaseFirestore
+    private val authApi: AuthApi,
+    private val tokenStore: TokenStore
 ) : ILoginRepository {
 
     override fun login(email: String, password: String): Flow<ResultWrapper<Unit>> = flow {
+        emit(ResultWrapper.Loading())
+
         try {
-            emit(ResultWrapper.Loading())
+            val response = authApi.login(LoginRequestDto(email, password))
 
-            val result = auth.signInWithEmailAndPassword(email, password).await()
-
-            result.user?.email?.let {
-                db.collection("users")
-                    .document(result.user!!.uid)
-                    .set(mapOf("email" to it))
-                    .await()
+            if (!response.isSuccessful) {
+                emit(ResultWrapper.Error("Login inválido (${response.code()})."))
+                return@flow
             }
 
+            val body = response.body()
+            val token = body?.token
+
+            if (token.isNullOrBlank()) {
+                emit(ResultWrapper.Error("Login efetuado, mas a API não devolveu token (campo 'token')."))
+                return@flow
+            }
+
+            tokenStore.saveToken(token)
             emit(ResultWrapper.Success(Unit))
 
         } catch (e: Exception) {
-            emit(ResultWrapper.Error(e.message ?: "Erro desconhecido"))
+            emit(ResultWrapper.Error(e.message ?: "Erro desconhecido no login"))
         }
-
     }.flowOn(Dispatchers.IO)
 
-
     override fun register(email: String, password: String): Flow<ResultWrapper<Unit>> = flow {
+        emit(ResultWrapper.Loading())
+
         try {
-            emit(ResultWrapper.Loading())
+            val response = authApi.register(RegisterRequestDto(email, password))
 
-            val result = auth.createUserWithEmailAndPassword(email, password).await()
+            if (!response.isSuccessful) {
+                emit(ResultWrapper.Error("Registo inválido (${response.code()})."))
+                return@flow
+            }
 
-            db.collection("users")
-                .document(result.user!!.uid)
-                .set(mapOf("email" to email))
-                .await()
+            val body = response.body()
+            val token = body?.token
+
+            // Se a API devolver token no registo, guarda-se e fica logo autenticado
+            if (!token.isNullOrBlank()) {
+                tokenStore.saveToken(token)
+            }
 
             emit(ResultWrapper.Success(Unit))
 
         } catch (e: Exception) {
             emit(ResultWrapper.Error(e.message ?: "Erro ao registar"))
         }
-
     }.flowOn(Dispatchers.IO)
 }

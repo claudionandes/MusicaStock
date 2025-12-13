@@ -2,7 +2,6 @@ package ipca.example.musicastock.domain.repository
 
 import ipca.example.musicastock.data.ResultWrapper
 import ipca.example.musicastock.domain.models.Collection
-import ipca.example.musicastock.domain.models.Music
 import kotlinx.coroutines.flow.Flow
 
 interface ICollectionRepository {

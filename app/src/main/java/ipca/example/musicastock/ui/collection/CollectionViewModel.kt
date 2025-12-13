@@ -5,43 +5,38 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.android.identity.util.UUID
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ipca.example.musicastock.data.ResultWrapper
 import ipca.example.musicastock.data.repository.CollectionsLocalRepository
 import ipca.example.musicastock.domain.models.Collection
 import ipca.example.musicastock.domain.repository.ICollectionRepository
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class CollectionState(
     val collections: List<Collection> = emptyList(),
     val error: String? = null,
     val isLoading: Boolean = false,
-    val userEmail: String = "Utilizador desconhecido"
+    // Mantido só para não partir UI existente (pode ser removido depois)
+    val userEmail: String = "Jukebox API"
 )
+
 @HiltViewModel
 class CollectionViewModel @Inject constructor(
     private val collectionRepository: ICollectionRepository,
     private val localRepository: CollectionsLocalRepository
 ) : ViewModel() {
 
-    var uiState by mutableStateOf(
-        CollectionState(
-            userEmail = collectionRepository.getCurrentUserEmail() ?: "Utilizador desconhecido"
-        )
-    )
+    var uiState by mutableStateOf(CollectionState())
+        private set
 
     fun fetchCollections() {
         viewModelScope.launch {
             collectionRepository.fetchCollections().collect { result ->
                 when (result) {
-
                     is ResultWrapper.Loading -> {
-                        uiState = uiState.copy(
-                            isLoading = true,
-                            error = null
-                        )
+                        uiState = uiState.copy(isLoading = true, error = null)
                     }
 
                     is ResultWrapper.Success -> {
@@ -53,30 +48,25 @@ class CollectionViewModel @Inject constructor(
                             error = null
                         )
 
-                        try {
+                        // Cache local (redundante se o repo já o fizer, mas não quebra)
+                        runCatching {
                             localRepository.clearAll()
                             localRepository.insertCollections(collections)
-                        } catch (_: Exception) {}
+                        }
                     }
 
                     is ResultWrapper.Error -> {
-                        try {
-                            val cached = localRepository.getAllCollections()
+                        val cached = runCatching { localRepository.getAllCollections() }
+                            .getOrDefault(emptyList())
 
-                            if (cached.isNotEmpty()) {
-                                uiState = uiState.copy(
-                                    collections = cached,
-                                    isLoading = false,
-                                    error = "Sem ligação. A mostrar dados offline."
-                                )
-                            } else {
-                                uiState = uiState.copy(
-                                    isLoading = false,
-                                    error = result.message ?: "Erro ao carregar coleções."
-                                )
-                            }
-                        } catch (e: Exception) {
-                            uiState = uiState.copy(
+                        uiState = if (cached.isNotEmpty()) {
+                            uiState.copy(
+                                collections = cached,
+                                isLoading = false,
+                                error = "Sem ligação. A mostrar dados offline."
+                            )
+                        } else {
+                            uiState.copy(
                                 isLoading = false,
                                 error = result.message ?: "Erro ao carregar coleções."
                             )
@@ -87,38 +77,38 @@ class CollectionViewModel @Inject constructor(
         }
     }
 
-
     fun addCollection(title: String, style: String, onSuccess: (String) -> Unit) {
-        val currentUserId = collectionRepository.getCurrentUserId()
-        if (currentUserId == null) {
-            uiState = uiState.copy(error = "Utilizador não autenticado.")
+        val titleTrim = title.trim()
+        val styleTrim = style.trim()
+
+        if (titleTrim.isBlank()) {
+            uiState = uiState.copy(error = "O título é obrigatório.")
             return
         }
 
+
         val baseCollection = Collection(
-            id = null,
-            title = title,
-            style = style,
-            owners = listOf(currentUserId)
+            title = titleTrim,
+            style = styleTrim.ifBlank { null }
         )
 
         viewModelScope.launch {
             collectionRepository.addCollection(baseCollection).collect { result ->
                 when (result) {
-
                     is ResultWrapper.Loading -> {
                         uiState = uiState.copy(isLoading = true, error = null)
                     }
 
                     is ResultWrapper.Success -> {
-
-                        val newId = result.data ?: return@collect
+                        val newId = result.data
+                        if (newId.isNullOrBlank()) {
+                            uiState = uiState.copy(isLoading = false, error = "Erro: ID da coleção inválido.")
+                            return@collect
+                        }
 
                         val finalCollection = baseCollection.copy(id = newId)
 
-                        try {
-                            localRepository.insertCollection(finalCollection)
-                        } catch (_: Exception) {}
+                        runCatching { localRepository.insertCollection(finalCollection) }
 
                         uiState = uiState.copy(
                             collections = uiState.collections + finalCollection,
@@ -130,49 +120,54 @@ class CollectionViewModel @Inject constructor(
                     }
 
                     is ResultWrapper.Error -> {
-                        try {
+                        // Offline-friendly: cria ID local e navega na mesma
+                        val localId = UUID.randomUUID().toString()
+                        val localCollection = baseCollection.copy(id = localId)
 
-                            val localId = UUID.randomUUID().toString()
+                        val saved = runCatching { localRepository.insertCollection(localCollection) }.isSuccess
 
-                            val localCollection = baseCollection.copy(id = localId)
+                        uiState = uiState.copy(
+                            collections = uiState.collections + localCollection,
+                            isLoading = false,
+                            error = if (saved) {
+                                "Sem ligação. Coletânea guardada apenas localmente."
+                            } else {
+                                result.message ?: "Erro ao guardar coletânea."
+                            }
+                        )
 
-                            localRepository.insertCollection(localCollection)
-
-                            uiState = uiState.copy(
-                                collections = uiState.collections + localCollection,
-                                isLoading = false,
-                                error = "Sem ligação. Coletânea guardada apenas localmente."
-                            )
-
-
-                            onSuccess(localId)
-
-                        } catch (e: Exception) {
-                            uiState = uiState.copy(
-                                isLoading = false,
-                                error = "Erro ao guardar coletânea: ${e.message}"
-                            )
-                        }
+                        onSuccess(localId)
                     }
                 }
             }
         }
     }
 
-
     fun deleteCollection(id: String) {
         viewModelScope.launch {
             collectionRepository.deleteCollection(id).collect { result ->
                 when (result) {
-                    is ResultWrapper.Error -> {
-                        uiState = uiState.copy(error = result.message)
-                    }
-                    is ResultWrapper.Success -> {
-                        val updated = uiState.collections.filterNot { it.id == id }
-                        uiState = uiState.copy(collections = updated)
-                    }
                     is ResultWrapper.Loading -> {
                         uiState = uiState.copy(isLoading = true, error = null)
+                    }
+
+                    is ResultWrapper.Success -> {
+                        val updated = uiState.collections.filterNot { it.id == id }
+                        uiState = uiState.copy(
+                            collections = updated,
+                            isLoading = false,
+                            error = null
+                        )
+                    }
+
+                    is ResultWrapper.Error -> {
+                        // O repository pode já ter apagado localmente e devolver erro só para avisar "sem ligação".
+                        val updated = uiState.collections.filterNot { it.id == id }
+                        uiState = uiState.copy(
+                            collections = updated,
+                            isLoading = false,
+                            error = result.message ?: "Sem ligação. Coletânea apagada apenas localmente."
+                        )
                     }
                 }
             }
@@ -180,35 +175,45 @@ class CollectionViewModel @Inject constructor(
     }
 
     fun updateCollection(id: String, title: String, style: String) {
+        val titleTrim = title.trim()
+        val styleTrim = style.trim()
+
+        if (titleTrim.isBlank()) {
+            uiState = uiState.copy(error = "O título é obrigatório.")
+            return
+        }
+
         viewModelScope.launch {
-            collectionRepository.updateCollection(id, title, style).collect { result ->
+            collectionRepository.updateCollection(id, titleTrim, styleTrim).collect { result ->
                 when (result) {
-
                     is ResultWrapper.Loading -> {
-                        uiState = uiState.copy(
-                            isLoading = true,
-                            error = null
-                        )
-                    }
-
-                    is ResultWrapper.Error -> {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            error = result.message
-                        )
+                        uiState = uiState.copy(isLoading = true, error = null)
                     }
 
                     is ResultWrapper.Success -> {
-                        val updatedList = uiState.collections.map { collection ->
-                            if (collection.id == id)
-                                collection.copy(title = title, style = style)
-                            else collection
+                        val updatedList = uiState.collections.map { c ->
+                            if (c.id == id) c.copy(title = titleTrim, style = styleTrim.ifBlank { null })
+                            else c
                         }
 
                         uiState = uiState.copy(
                             collections = updatedList,
                             isLoading = false,
                             error = null
+                        )
+                    }
+
+                    is ResultWrapper.Error -> {
+                        // O repository pode ter atualizado localmente e devolver erro só para avisar "sem ligação".
+                        val updatedList = uiState.collections.map { c ->
+                            if (c.id == id) c.copy(title = titleTrim, style = styleTrim.ifBlank { null })
+                            else c
+                        }
+
+                        uiState = uiState.copy(
+                            collections = updatedList,
+                            isLoading = false,
+                            error = result.message ?: "Sem ligação. Coletânea atualizada apenas localmente."
                         )
                     }
                 }
