@@ -36,7 +36,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    private const val BASE_URL = "http://10.0.2.2:5267/"
+    private const val BASE_URL = "https://jukebox-api-isi-fmhzchchcggsbwam.francecentral-01.azurewebsites.net"
 
     // -----------------------------
     // TokenStore
