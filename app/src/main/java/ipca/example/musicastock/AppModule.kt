@@ -29,7 +29,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
-import ipca.example.musicastock.BuildConfig
+
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -142,20 +142,8 @@ object AppModule {
     @Module
     @InstallIn(SingletonComponent::class)
     object AppModule {
-
-        // REMOVE ou COMENTA a linha antiga:
-        // private const val BASE_URL = "http://10.0.2.2:5000/"
-
-        @Provides
-        @Singleton
-        fun provideRetrofit(client: OkHttpClient): Retrofit =
-            Retrofit.Builder()
-                // Usa o valor do BuildConfig
-                .baseUrl(BuildConfig.BASE_URL)
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
-
-        // ... restante código
     }
+
+
+
 }
