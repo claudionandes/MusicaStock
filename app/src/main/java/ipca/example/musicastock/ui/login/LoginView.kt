@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -17,16 +20,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import ipca.example.musicastock.R
+import kotlinx.coroutines.delay
 
 @Composable
 fun LoginView(
     onLoginSuccess: () -> Unit,
+    onForgotPasswordNavigate: () -> Unit, // navega para o ecrã de reset
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState
@@ -37,11 +43,27 @@ fun LoginView(
     var confirmPassword by rememberSaveable { mutableStateOf("") }
     var registerError by rememberSaveable { mutableStateOf<String?>(null) }
 
+    var loginPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    var registerPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    var confirmPasswordVisible by rememberSaveable { mutableStateOf(false) }
+
     fun resetRegisterForm() {
         registerEmail = ""
         registerPassword = ""
         confirmPassword = ""
         registerError = null
+        registerPasswordVisible = false
+        confirmPasswordVisible = false
+    }
+
+    // ✅ Após pedir recuperação com sucesso:
+    // mostra a mensagem ~5s e navega automaticamente para o reset
+    LaunchedEffect(uiState.forgotPasswordSent) {
+        if (uiState.forgotPasswordSent) {
+            delay(5000)
+            viewModel.clearForgotPasswordSent()
+            onForgotPasswordNavigate()
+        }
     }
 
     val fieldColors = TextFieldDefaults.colors(
@@ -126,9 +148,7 @@ fun LoginView(
                     onValueChange = { viewModel.setEmail(it) },
                     label = { Text("Email") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Email
-                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
@@ -142,17 +162,67 @@ fun LoginView(
                     onValueChange = { viewModel.setPassword(it) },
                     label = { Text("Palavra-passe") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password
-                    ),
+                    visualTransformation = if (loginPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { loginPasswordVisible = !loginPasswordVisible }) {
+                            Icon(
+                                imageVector = if (loginPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (loginPasswordVisible) "Ocultar password" else "Mostrar password",
+                                tint = Color.White
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
                     colors = fieldColors
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                // ---- Forgot password ----
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = { viewModel.forgotPassword() },
+                        enabled = !uiState.isForgotPasswordLoading
+                    ) {
+                        if (uiState.isForgotPasswordLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = "Esqueci-me da password",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                uiState.forgotPasswordMessage?.let { msg ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = msg,
+                        color = Color(0xFFB3E5FC),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = { viewModel.login(onLoginSuccess) },
@@ -184,6 +254,7 @@ fun LoginView(
                     TextButton(
                         onClick = {
                             resetRegisterForm()
+                            viewModel.clearForgotMessage()
                             showRegisterBox = true
                         }
                     ) {
@@ -282,9 +353,18 @@ fun LoginView(
                             value = registerPassword,
                             onValueChange = { registerPassword = it; registerError = null },
                             label = { Text("Palavra-passe") },
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (registerPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { registerPasswordVisible = !registerPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (registerPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = if (registerPasswordVisible) "Ocultar password" else "Mostrar password",
+                                        tint = Color.White
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             colors = registerFieldColors
                         )
@@ -295,9 +375,18 @@ fun LoginView(
                             value = confirmPassword,
                             onValueChange = { confirmPassword = it; registerError = null },
                             label = { Text("Confirmar palavra-passe") },
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (confirmPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = if (confirmPasswordVisible) "Ocultar password" else "Mostrar password",
+                                        tint = Color.White
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             colors = registerFieldColors
                         )

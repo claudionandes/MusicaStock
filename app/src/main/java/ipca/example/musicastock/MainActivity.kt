@@ -1,19 +1,24 @@
 package ipca.example.musicastock
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.Box
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -27,15 +32,14 @@ import ipca.example.musicastock.ui.collection.CollectionEditView
 import ipca.example.musicastock.ui.collection.CollectionView
 import ipca.example.musicastock.ui.home.HomeView
 import ipca.example.musicastock.ui.login.LoginView
+import ipca.example.musicastock.ui.login.ResetPasswordView
 import ipca.example.musicastock.ui.musics.AllMusicsView
 import ipca.example.musicastock.ui.musics.MusicDetailView
 import ipca.example.musicastock.ui.theme.MusicastockTheme
 import javax.inject.Inject
 
-
 // Ambiente "Crossfit Box" (Porto)
 private const val DEFAULT_ENVIRONMENT_ID = "d32082ce-f5d5-4ec6-aa5a-5801e52e0204"
-
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -50,17 +54,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
 
-            // Estado para a rota inicial (login ou home)
             var startDestination by remember { mutableStateOf<String?>(null) }
 
-            // Ler o token de forma assíncrona (DataStore)
             LaunchedEffect(Unit) {
                 val token = tokenStore.getToken()
                 startDestination = if (token.isNullOrBlank()) "login" else "home"
             }
 
             MusicastockTheme {
-                // Enquanto ainda não sabemos a rota inicial, mostra loading
                 if (startDestination == null) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -83,6 +84,7 @@ class MainActivity : ComponentActivity() {
                                 navController = navController,
                                 startDestination = startDestination!!
                             ) {
+
                                 // ------------- LOGIN -------------
                                 composable("login") {
                                     LoginView(
@@ -90,6 +92,11 @@ class MainActivity : ComponentActivity() {
                                             navController.navigate("home") {
                                                 popUpTo("login") { inclusive = true }
                                             }
+                                        },
+                                        onForgotPasswordNavigate = {
+                                            // Vai para o ecrã onde o utilizador cola o token e define nova password
+                                            // (o token pode vir vazio, porque o user recebe no email)
+                                            navController.navigate("resetPassword")
                                         }
                                     )
                                 }
@@ -179,6 +186,31 @@ class MainActivity : ComponentActivity() {
                                         navController = navController,
                                         collectionId = colId,
                                         musicId = musId
+                                    )
+                                }
+
+                                // ------------- RESET PASSWORD -------------
+                                // Token como query param, porque pode ter '/' '+' '='
+                                // Para navegar com token: navController.navigate("resetPassword?token=${Uri.encode(token)}")
+                                composable(
+                                    route = "resetPassword?token={token}",
+                                    arguments = listOf(
+                                        navArgument("token") {
+                                            type = NavType.StringType
+                                            defaultValue = ""
+                                        }
+                                    )
+                                ) { entry ->
+                                    val encodedToken = entry.arguments?.getString("token") ?: ""
+                                    val token = if (encodedToken.isBlank()) "" else Uri.decode(encodedToken)
+
+                                    ResetPasswordView(
+                                        token = token,
+                                        onPasswordResetSuccess = {
+                                            navController.navigate("login") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        }
                                     )
                                 }
                             }
