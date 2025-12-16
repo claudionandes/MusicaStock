@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,7 +24,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import ipca.example.musicastock.R
 import ipca.example.musicastock.domain.models.Collection
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+
+private val AccentOrange = Color(0xFFAF512E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,30 +37,29 @@ fun HomeView(
 ) {
     val uiState = viewModel.uiState
 
-    // Carregar dados do ambiente
     LaunchedEffect(environmentId) {
         viewModel.load(environmentId)
     }
 
-    // Eventos one-shot (ex.: navegar para todas as coleções)
+    LaunchedEffect(uiState.isLoading, uiState.selectedMode) {
+        if (!uiState.isLoading && uiState.selectedMode == RecommendationMode.NONE) {
+            viewModel.selectWeatherMode()
+        }
+    }
+
     LaunchedEffect(Unit) {
-        viewModel.events.collect { event ->
+        viewModel.events.collectLatest { event ->
             when (event) {
-                HomeEvent.NavigateToAllCollections -> {
-                    navController.navigate("collections")
-                }
+                HomeEvent.NavigateToAllCollections -> navController.navigate("collections")
             }
         }
     }
 
-    // Dialog de erro
     uiState.error?.let { errorMsg ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
             confirmButton = {
-                TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
-                }
+                TextButton(onClick = { viewModel.clearError() }) { Text("OK") }
             },
             title = { Text("Erro") },
             text = { Text(errorMsg) }
@@ -68,7 +68,6 @@ fun HomeView(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Fundo com imagem
         Image(
             painter = painterResource(id = R.drawable.img_3),
             contentDescription = null,
@@ -76,16 +75,13 @@ fun HomeView(
             contentScale = ContentScale.Crop
         )
 
-        // Overlay escuro
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.4f))
         )
 
-        Scaffold(
-            containerColor = Color.Transparent
-        ) { innerPadding ->
+        Scaffold(containerColor = Color.Transparent) { innerPadding ->
 
             val layoutDirection = LocalLayoutDirection.current
 
@@ -99,11 +95,10 @@ fun HomeView(
                     )
             ) {
 
-                // HEADER tipo "hero", igual ao estilo de CollectionView
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(160.dp)
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.img_51),
@@ -118,7 +113,6 @@ fun HomeView(
                             .background(Color.Black.copy(alpha = 0.3f))
                     )
 
-
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -126,11 +120,10 @@ fun HomeView(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Botão Sair
                         TextButton(
                             onClick = {
                                 navController.navigate("login") {
-                                    popUpTo("collections") { inclusive = true }
+                                    popUpTo("home") { inclusive = true }
                                 }
                             },
                             contentPadding = PaddingValues(0.dp)
@@ -141,10 +134,7 @@ fun HomeView(
                                     contentDescription = "logout",
                                     tint = Color.White.copy(alpha = 0.9f)
                                 )
-                                Spacer(
-                                    modifier = Modifier
-                                        .width(4.dp)
-                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "Sair",
                                     color = Color.White.copy(alpha = 0.9f)
@@ -153,8 +143,6 @@ fun HomeView(
                         }
                     }
 
-
-                    // Centro: nome do ambiente + cidade
                     Column(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -180,14 +168,13 @@ fun HomeView(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Linha de cartões: Exterior / Interior
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -200,10 +187,10 @@ fun HomeView(
                                 .fillMaxHeight(),
                             tempRange = uiState.externalTempRange,
                             description = uiState.externalWeatherDescription,
-                            precipitation = uiState.externalPrecipitation
+                            precipitation = uiState.externalPrecipitation,
+                            selected = uiState.selectedMode == RecommendationMode.WEATHER,
+                            onSelect = { viewModel.selectWeatherMode() }
                         )
-
-
 
                         SensorsCard(
                             modifier = Modifier
@@ -211,37 +198,12 @@ fun HomeView(
                                 .fillMaxHeight(),
                             temperature = uiState.internalTemperature,
                             humidity = uiState.internalHumidity,
-                            light = uiState.internalLight
+                            light = uiState.internalLight,
+                            selected = uiState.selectedMode == RecommendationMode.SENSORS,
+                            onSelect = { viewModel.selectSensorsMode() }
                         )
                     }
 
-                    // Secção de modos de recomendação
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            SuggestionModeButton(
-                                text = "Sugestões por Meteorologia",
-                                selected = uiState.selectedMode == RecommendationMode.WEATHER,
-                                onClick = { viewModel.selectWeatherMode() },
-                                modifier = Modifier.weight(1f)
-                            )
-                            SuggestionModeButton(
-                                text = "Sugestões por Sensores",
-                                selected = uiState.selectedMode == RecommendationMode.SENSORS,
-                                onClick = { viewModel.selectSensorsMode() },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // Bloco de sugestões de coletâneas
                     val collectionsToShow: List<Collection> = when (uiState.selectedMode) {
                         RecommendationMode.WEATHER -> uiState.weatherBasedCollections
                         RecommendationMode.SENSORS -> uiState.sensorBasedCollections
@@ -255,7 +217,7 @@ fun HomeView(
                         colors = CardDefaults.cardColors(
                             containerColor = Color.Black.copy(alpha = 0.35f)
                         ),
-                        shape = RoundedCornerShape(24.dp) // garante que tens este import
+                        shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
                             modifier = Modifier
@@ -286,14 +248,6 @@ fun HomeView(
                                         CircularProgressIndicator(color = Color.White)
                                     }
 
-                                    uiState.selectedMode == RecommendationMode.NONE -> {
-                                        Text(
-                                            text = "Escolha um tipo de sugestão para ver as coletâneas recomendadas.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White.copy(alpha = 0.9f)
-                                        )
-                                    }
-
                                     collectionsToShow.isEmpty() -> {
                                         Text(
                                             text = "Não foram encontradas coletâneas compatíveis com este contexto.",
@@ -308,8 +262,9 @@ fun HomeView(
                                             verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             items(
-                                                collectionsToShow,
-                                                key = { it.id }) { collection ->
+                                                items = collectionsToShow,
+                                                key = { it.id }
+                                            ) { collection ->
                                                 CollectionSuggestionRow(
                                                     collection = collection,
                                                     onClick = {
@@ -324,8 +279,6 @@ fun HomeView(
                         }
                     }
 
-
-
                     Button(
                         onClick = { viewModel.onViewAllCollectionsClicked() },
                         modifier = Modifier.height(56.dp),
@@ -336,47 +289,46 @@ fun HomeView(
                             bottomEnd = 28.dp
                         ),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFAF512E),
+                            containerColor = AccentOrange,
                             contentColor = Color.White
                         ),
                         contentPadding = PaddingValues(
                             horizontal = 12.dp,
-                            vertical = 4.dp
+                            vertical = 1.dp
                         )
                     ) {
                         Text("Todas as coletâneas")
                     }
                 }
-
-                }
             }
         }
     }
-
+}
 
 @Composable
 private fun WeatherCard(
     modifier: Modifier = Modifier,
     tempRange: String,
     description: String,
-    precipitation: String
+    precipitation: String,
+    selected: Boolean,
+    onSelect: () -> Unit
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1A1A)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Exterior (IPMA)",
+                text = "Exterior",
                 style = MaterialTheme.typography.titleSmall,
-                color=Color.White,
+                color = AccentOrange,
                 fontWeight = FontWeight.Bold
             )
+
             if (tempRange.isNotBlank()) {
                 Text(
                     text = "Temperatura: $tempRange",
@@ -398,6 +350,15 @@ private fun WeatherCard(
                     color = Color.White.copy(alpha = 0.8f)
                 )
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            SuggestionModeButton(
+                text = "Sugestões",
+                selected = selected,
+                onClick = onSelect,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -407,22 +368,22 @@ private fun SensorsCard(
     modifier: Modifier = Modifier,
     temperature: String?,
     humidity: String?,
-    light: String?
+    light: String?,
+    selected: Boolean,
+    onSelect: () -> Unit
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1A1A)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Interior (Sensores)",
+                text = "Interior",
                 style = MaterialTheme.typography.titleSmall,
-                color = Color.White,
+                color = AccentOrange,
                 fontWeight = FontWeight.Bold
             )
 
@@ -455,6 +416,15 @@ private fun SensorsCard(
                     color = Color.White.copy(alpha = 0.8f)
                 )
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            SuggestionModeButton(
+                text = "Sugestões",
+                selected = selected,
+                onClick = onSelect,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -466,7 +436,7 @@ private fun SuggestionModeButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (selected) Color(0xFFAF512E) else Color(0xFF303030)
+    val bg = if (selected) AccentOrange else Color(0xFF303030)
     val fg = if (selected) Color.White else Color.White.copy(alpha = 0.9f)
 
     Surface(
@@ -475,7 +445,7 @@ private fun SuggestionModeButton(
         shape = MaterialTheme.shapes.large
     ) {
         Box(
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -497,13 +467,9 @@ private fun CollectionSuggestionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1E1E)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
-        ) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = collection.title ?: "(Sem título)",
                 style = MaterialTheme.typography.titleMedium,
@@ -514,7 +480,7 @@ private fun CollectionSuggestionRow(
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFAF512E)
+                    color = AccentOrange
                 )
             }
         }

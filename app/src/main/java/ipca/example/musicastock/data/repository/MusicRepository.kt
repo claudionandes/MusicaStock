@@ -133,42 +133,44 @@ class MusicRepository @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
-    override fun deleteMusic(id: String): Flow<ResultWrapper<Unit>> = flow {
+
+    override fun removeMusicFromCollection(
+        collectionId: String,
+        musicId: String
+    ): Flow<ResultWrapper<Unit>> = flow {
         emit(ResultWrapper.Loading())
 
-        val apiOk = runCatching {
-            val res = musicApi.delete(id)
-            res.isSuccessful
-        }.getOrDefault(false)
-
-        runCatching {
-            val all = localRepository.getAllMusics()
-            val match = all.firstOrNull { it.musId == id }
-            if (match != null) localRepository.deleteMusic(match)
-        }
-
-        if (apiOk) emit(ResultWrapper.Success(Unit))
-        else emit(ResultWrapper.Error("Sem ligação. Música apagada apenas localmente."))
-    }.flowOn(Dispatchers.IO)
-
-    override fun removeMusicFromCollection(collectionId: String, musicId: String): Flow<ResultWrapper<Unit>> = flow {
-        emit(ResultWrapper.Loading())
-
-        val apiOk = runCatching {
+        try {
             val res = collectionsApi.removeMusicFromCollection(collectionId, musicId)
-            res.isSuccessful
-        }.getOrDefault(false)
 
-        // Atualiza cache local: deixa de aparecer nesta coleção
-        runCatching {
-            val all = localRepository.getAllMusics()
-            val match = all.firstOrNull { it.musId == musicId }
-            if (match != null) localRepository.insertMusic(match.copy(collectionId = null))
+            if (!res.isSuccessful) {
+                // 👇 É AQUI que entra o que perguntaste
+                val errorText = res.errorBody()?.string()
+                emit(ResultWrapper.Error(errorText ?: "Erro (${res.code()})"))
+                return@flow
+            }
+
+            // Só atualiza localmente quando a API confirmou sucesso
+            runCatching {
+                val all = localRepository.getAllMusics()
+                val match = all.firstOrNull { it.musId == musicId }
+                if (match != null) localRepository.insertMusic(match.copy(collectionId = null))
+            }
+
+            emit(ResultWrapper.Success(Unit))
+
+        } catch (_: Exception) {
+            // offline
+            runCatching {
+                val all = localRepository.getAllMusics()
+                val match = all.firstOrNull { it.musId == musicId }
+                if (match != null) localRepository.insertMusic(match.copy(collectionId = null))
+            }
+
+            emit(ResultWrapper.Error("Sem ligação. Remoção feita apenas localmente."))
         }
-
-        if (apiOk) emit(ResultWrapper.Success(Unit))
-        else emit(ResultWrapper.Error("Sem ligação. Remoção feita apenas localmente."))
     }.flowOn(Dispatchers.IO)
+
 
     // -----------------------------
     // Mappers

@@ -176,40 +176,7 @@ class MusicViewModel @Inject constructor(
         }
     }
 
-    fun deleteMusic(musicId: String, onSuccess: () -> Unit = {}) {
-        viewModelScope.launch {
-            musicRepository.deleteMusic(musicId).collect { result ->
-                when (result) {
-                    is ResultWrapper.Loading -> {
-                        uiState = uiState.copy(isLoading = true, error = null)
-                    }
 
-                    is ResultWrapper.Success -> {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            error = null,
-                            musics = uiState.musics.filterNot { it.musId == musicId }
-                        )
-
-                        runCatching {
-                            val all = localRepository.getAllMusics()
-                            val match = all.firstOrNull { it.musId == musicId }
-                            if (match != null) localRepository.deleteMusic(match)
-                        }
-
-                        onSuccess()
-                    }
-
-                    is ResultWrapper.Error -> {
-                        uiState = uiState.copy(
-                            isLoading = false,
-                            error = result.message ?: "Erro ao apagar música."
-                        )
-                    }
-                }
-            }
-        }
-    }
 
     fun removeMusicFromCollection(collectionId: String, musicId: String) {
         viewModelScope.launch {

@@ -10,7 +10,6 @@ interface IMusicRepository {
     fun fetchMusics(collectionId: String? = null): Flow<ResultWrapper<List<Music>>>
     suspend fun getMusicById(id: String): ResultWrapper<Music?>
     fun saveMusic(music: Music): Flow<ResultWrapper<Unit>>
-    fun deleteMusic(id: String): Flow<ResultWrapper<Unit>>
 
     fun removeMusicFromCollection(collectionId: String, musicId: String): Flow<ResultWrapper<Unit>>
 }
