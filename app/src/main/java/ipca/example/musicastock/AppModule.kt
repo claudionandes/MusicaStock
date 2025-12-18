@@ -10,12 +10,12 @@ import dagger.hilt.components.SingletonComponent
 import ipca.example.musicastock.data.auth.AuthInterceptor
 import ipca.example.musicastock.data.auth.TokenStore
 import ipca.example.musicastock.data.auth.TokenStoreImpl
+import ipca.example.musicastock.data.auth.remote.EnvironmentsApi
 import ipca.example.musicastock.data.local.AppDatabase
 import ipca.example.musicastock.data.local.dao.CollectionDao
 import ipca.example.musicastock.data.local.dao.MusicDao
 import ipca.example.musicastock.data.remote.api.AuthApi
 import ipca.example.musicastock.data.remote.api.CollectionsApi
-import ipca.example.musicastock.data.remote.api.EnvironmentsApi
 import ipca.example.musicastock.data.remote.api.MusicApi
 import ipca.example.musicastock.data.repository.CollectionRepositoryImpl
 import ipca.example.musicastock.data.repository.CollectionsLocalRepository
@@ -51,24 +51,12 @@ object AppModule {
     // -----------------------------
     @Provides
     @Singleton
-    fun provideAuthInterceptor(tokenStore: TokenStore): AuthInterceptor =
-        AuthInterceptor(tokenStore)
-
-    // -----------------------------
-    // OkHttp / Retrofit
-    // -----------------------------
-    @Provides
-    @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
-
-        return OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .addInterceptor(authInterceptor)
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient =
+        OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)   // <- aqui é o ponto crítico
             .build()
-    }
+
+
 
     @Provides
     @Singleton
